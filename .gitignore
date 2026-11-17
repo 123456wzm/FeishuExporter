@@ -16,3 +16,12 @@ config.json
 # Excel/临时
 *.tmp
 .DS_Store
+
+# Android
+android-app/local.properties
+android-app/.gradle/
+android-app/app/build/
+android-app/build/
+android-app/.idea/
+android-app/*.iml
+android-app/app/src/test/resources/fixture_all.json
