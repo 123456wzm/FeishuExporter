@@ -3,7 +3,9 @@ package com.feishuexporter.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -116,10 +118,33 @@ class MainActivity : ComponentActivity() {
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
+                        val wv = this
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
-                        CookieManager.getInstance().setAcceptCookie(true)
-                        webViewClient = WebViewClient()
+                        // 用桌面 UA，避免飞书识别为移动端而走 lark:// 唤起客户端的登录流程
+                        settings.userAgentString = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                + "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                + "Chrome/120.0.0.0 Safari/537.36")
+                        CookieManager.getInstance().apply {
+                            setAcceptCookie(true)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                setAcceptThirdPartyCookies(wv, true)
+                            }
+                        }
+                        // 拦截非 http(s) 协议（lark://、about:blank 等），防止 ERR_UNKNOWN_URL_SCHEME 错误页
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView?, request: WebResourceRequest?
+                            ): Boolean {
+                                val url = request?.url?.toString() ?: return false
+                                return !(url.startsWith("http://") || url.startsWith("https://"))
+                            }
+                            @Deprecated("Deprecated in Java")
+                            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                                if (url == null) return false
+                                return !(url.startsWith("http://") || url.startsWith("https://"))
+                            }
+                        }
                         loadUrl("https://bcnjxil3ai78.feishu.cn/")
                     }
                 },
