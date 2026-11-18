@@ -37,7 +37,16 @@ data class ExportConfig(
     val subdocs: Boolean = true,
     val retries: Int = 3,
     val overwrite: Boolean = false,
-    val titleAsHeading: Boolean = true
+    val titleAsHeading: Boolean = true,
+    // ---- 认证方式 ----
+    // "oauth"  = 飞书开放平台应用（user_access_token → 官方 API，稳定，需同租户+协作者）
+    // "browser"= WebView 登录态（公开/外部链接兜底，走 window.DATA 抓取）
+    // "auto"   = 先试 oauth，失败自动降级 browser
+    val authMode: String = "auto",
+    val appId: String = "",
+    val appSecret: String = "",
+    val redirectPort: Int = 3000,           // 本地回调端口，回调路径固定 /callback
+    val userAccessToken: String = ""        // UI 层 OAuth 授权后拿到，传入引擎
 )
 
 /** 进度事件 */
