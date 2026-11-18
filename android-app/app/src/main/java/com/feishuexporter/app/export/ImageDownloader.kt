@@ -20,7 +20,9 @@ class ImageDownloader(
     private val cookies: String,
     private val origin: String,
     private val cfg: ExportConfig,
-    private val onProgress: (ProgressEvent) -> Unit = {}
+    private val onProgress: (ProgressEvent) -> Unit = {},
+    // API 模式：传入 apiSource 与 token 后，改用官方 drive 接口下载
+    private val apiDownload: ((String) -> ByteArray?)? = null
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -33,6 +35,21 @@ class ImageDownloader(
         if (cfg.images == "skip" || cfg.images == "url-only") return false
         if (destFile.exists() && destFile.length() > 0 && !cfg.overwrite) return true
 
+        // API 模式：走官方 drive/medias 下载（带 Bearer）
+        if (apiDownload != null) {
+            repeat(cfg.retries.coerceAtLeast(1)) { attempt ->
+                val bytes = apiDownload!!.invoke(ref.token)
+                if (bytes != null && bytes.isNotEmpty() && isImage(bytes)) {
+                    destFile.parentFile?.mkdirs()
+                    destFile.writeBytes(bytes)
+                    return true
+                }
+                if (attempt < cfg.retries - 1) Thread.sleep(300L * (attempt + 1))
+            }
+            return false
+        }
+
+        // 浏览器模式：cover 失败回退 download/all（对应桌面版踩坑）
         val endpoints = listOf(
             "$origin/space/api/box/stream/download/v2/cover/${ref.token}/",
             "$origin/space/api/box/stream/download/all/${ref.token}/"
@@ -51,10 +68,8 @@ class ImageDownloader(
                         if (resp.isSuccessful && bytes != null && bytes.isNotEmpty()) {
                             // 校验是图片（PNG/JPEG/GIF/WEBP 文件头 或 content-type）
                             val ct = resp.header("Content-Type", "") ?: ""
-                            val isImage = ct.contains("image", ignoreCase = true) ||
-                                bytes[0] == 0x89.toByte() || bytes[0] == 'G'.code.toByte() ||
-                                bytes[0] == 'R'.code.toByte()
-                            if (isImage) {
+                            val ok = ct.contains("image", ignoreCase = true) || isImage(bytes)
+                            if (ok) {
                                 destFile.parentFile?.mkdirs()
                                 destFile.writeBytes(bytes)
                                 return true
@@ -86,5 +101,13 @@ class ImageDownloader(
             }
         }
         jobs.awaitAll()
+    }
+
+    private fun isImage(b: ByteArray): Boolean {
+        if (b.size < 2) return false
+        return b[0] == 0x89.toByte() ||   // PNG
+               b[0] == 'G'.code.toByte() || // GIF
+               b[0] == 'R'.code.toByte() || // RIFF(WebP)
+               (b[0] == 0xFF.toByte() && b[1] == 0xD8.toByte()) // JPEG
     }
 }
