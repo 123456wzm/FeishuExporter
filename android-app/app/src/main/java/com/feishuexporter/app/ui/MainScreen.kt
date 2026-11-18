@@ -23,7 +23,10 @@ fun MainScreen(
     progress: ProgressEvent,
     logs: List<String>,
     report: ExportReport?,
+    hasToken: Boolean,
     onLogin: () -> Unit,
+    onOAuth: () -> Unit,
+    onClearToken: () -> Unit,
     onStart: (ExportConfig) -> Unit,
     onCancel: () -> Unit,
     onOpenResult: () -> Unit
@@ -34,12 +37,14 @@ fun MainScreen(
     var layout by remember { mutableStateOf("tree") }
     var workers by remember { mutableStateOf("8") }
     var expandedImages by remember { mutableStateOf(false) }
+    var authMode by remember { mutableStateOf(if (hasToken) "oauth" else "auto") }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("飞书导出器") },
                 actions = {
+                    IconButton(onClick = onOAuth) { Icon(Icons.Default.Key, "OAuth 授权") }
                     IconButton(onClick = onLogin) { Icon(Icons.Default.Login, "登录") }
                 }
             )
@@ -49,6 +54,36 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                Text("认证方式", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("auto", "oauth", "browser").forEach { m ->
+                        FilterChip(
+                            selected = authMode == m,
+                            onClick = { authMode = m },
+                            enabled = !running,
+                            label = { Text(when (m) { "auto" -> "自动"; "oauth" -> "API"; else -> "网页" }) }
+                        )
+                    }
+                }
+                val hint = when (authMode) {
+                    "oauth" -> "API：稳定，用于同租户知识库（需先授权，且应用已加为协作者）"
+                    "browser" -> "网页：外部/公开链接兜底，走浏览器登录态"
+                    else -> "自动：优先 API，读不到时自动退回网页模式"
+                }
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (hasToken) "✓ 已获得 API 授权" else "○ 未授权 API",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (hasToken) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (hasToken) TextButton(onClick = onClearToken, enabled = !running) { Text("清除") }
+                }
+            }
+
             item {
                 Text("知识库 / 文档链接", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(
@@ -118,6 +153,7 @@ fun MainScreen(
                         onClick = {
                             onStart(ExportConfig(
                                 url = url.text.trim(),
+                                authMode = authMode,
                                 images = images, format = format, layout = layout,
                                 workers = workers.toIntOrNull()?.coerceIn(1, 32) ?: 8
                             ))
